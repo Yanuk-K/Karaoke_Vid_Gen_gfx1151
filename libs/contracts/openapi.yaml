@@ -1,0 +1,190 @@
+openapi: 3.1.0
+info:
+  title: Karaoke Video Generator Local API
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /projects:
+    post:
+      summary: Create project and start pipeline
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [audio_file]
+              properties:
+                audio_file:
+                  type: string
+                  format: binary
+                lyrics_text:
+                  type: string
+      responses:
+        "200":
+          description: Project created
+  /projects/{project_id}:
+    get:
+      summary: Get project status and artifacts
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project payload
+  /projects/{project_id}/rerun:
+    post:
+      summary: Rerun selected stages
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stages]
+              properties:
+                stages:
+                  type: array
+                  items:
+                    type: string
+                unlocked_only:
+                  type: boolean
+      responses:
+        "200":
+          description: Rerun accepted
+  /projects/{project_id}/lyrics:
+    patch:
+      summary: Replace lyrics and realign
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lyrics_text]
+              properties:
+                lyrics_text:
+                  type: string
+      responses:
+        "200":
+          description: Update accepted
+  /projects/{project_id}/timing:
+    patch:
+      summary: Save edited timing and rerender preview
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimingPayload"
+      responses:
+        "200":
+          description: Update accepted
+  /projects/{project_id}/midi:
+    get:
+      summary: Download midi
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: MIDI file
+  /projects/{project_id}/video:
+    get:
+      summary: Download preview/final video
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+            enum: [preview, final]
+      responses:
+        "200":
+          description: MP4 file
+components:
+  schemas:
+    TimingWord:
+      type: object
+      required: [text, start, end, source, locked]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        start:
+          type: number
+        end:
+          type: number
+        source:
+          type: string
+          enum: [model, user_edited]
+        locked:
+          type: boolean
+    TimingLine:
+      type: object
+      required: [text, display_start, sing_start, end, source, locked, words]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        display_start:
+          type: number
+        sing_start:
+          type: number
+        end:
+          type: number
+        source:
+          type: string
+          enum: [model, user_edited]
+        locked:
+          type: boolean
+        words:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimingWord"
+    TimingPayload:
+      type: object
+      required: [version, countdown_offset, next_line_lead_time, lines]
+      properties:
+        version:
+          type: integer
+        countdown_offset:
+          type: number
+        next_line_lead_time:
+          type: number
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimingLine"

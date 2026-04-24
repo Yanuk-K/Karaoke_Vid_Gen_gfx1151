@@ -1,0 +1,38 @@
+# API
+fastapi>=0.116.0
+uvicorn>=0.35.0
+python-multipart>=0.0.20
+pydantic>=2.11.0
+python-dotenv>=1.0.0
+
+# Transcription
+openai>=1.0.0
+
+# Audio processing
+numpy
+scipy
+librosa
+soundfile
+pydub
+
+# UVR / BS-RoFormer
+pillow
+onnxruntime
+onnx2pytorch
+rotary-embedding-torch
+einops
+beartype
+
+# torch deps
+filelock
+fsspec
+jinja2
+networkx
+setuptools
+sympy
+
+# Pitch extraction
+torchcrepe
+
+# YAML config parsing
+pyyaml

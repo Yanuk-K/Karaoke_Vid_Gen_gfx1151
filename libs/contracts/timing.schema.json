@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EditedLyricsTiming",
+  "type": "object",
+  "required": ["version", "countdown_offset", "next_line_lead_time", "lines"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "countdown_offset": { "type": "number", "minimum": 0 },
+    "next_line_lead_time": { "type": "number", "minimum": 0 },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "display_start", "sing_start", "end", "source", "locked", "words"],
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "display_start": { "type": "number", "minimum": 0 },
+          "sing_start": { "type": "number", "minimum": 0 },
+          "end": { "type": "number", "minimum": 0 },
+          "source": { "type": "string", "enum": ["model", "user_edited"] },
+          "locked": { "type": "boolean" },
+          "words": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text", "start", "end", "source", "locked"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "start": { "type": "number", "minimum": 0 },
+                "end": { "type": "number", "minimum": 0 },
+                "source": { "type": "string", "enum": ["model", "user_edited"] },
+                "locked": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
