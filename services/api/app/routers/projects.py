@@ -74,11 +74,12 @@ async def create_project(
     audio_file: UploadFile = File(...),
     lyrics_text: str | None = Form(None),
     transcription_backend: str = Form("openai"),
+    language: str | None = Form(None),
     store: ProjectStore = Depends(get_store),
     pipeline: PipelineService = Depends(get_pipeline_service),
 ) -> ProjectCreateResponse:
     # Validate transcription backend
-    if transcription_backend not in ["openai", "whisper_cpp"]:
+    if transcription_backend not in ["openai", "whisper_cpp", "qwen_asr"]:
         transcription_backend = "openai"
 
     if transcription_backend == "whisper_cpp":
@@ -89,6 +90,16 @@ async def create_project(
                 detail={
                     "message": "Invalid whisper.cpp configuration",
                     "errors": whisper_errors,
+                },
+            )
+    elif transcription_backend == "qwen_asr":
+        qwen_errors = app_config.validate_qwen_asr_config()
+        if qwen_errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Invalid Qwen3-ASR configuration",
+                    "errors": qwen_errors,
                 },
             )
     else:
@@ -102,7 +113,7 @@ async def create_project(
                 },
             )
      
-    payload = store.create_project(audio_file, lyrics_text, transcription_backend)
+    payload = store.create_project(audio_file, lyrics_text, transcription_backend, language)
     pipeline.start_full_pipeline(payload["project_id"])
     return ProjectCreateResponse(project_id=payload["project_id"], status=payload["status"])
 
@@ -123,7 +134,7 @@ def rerun_project(
     pipeline: PipelineService = Depends(get_pipeline_service),
 ) -> ProjectCreateResponse:
     _ = store.get_project(project_id)
-    pipeline.rerun(project_id, req.stages, req.unlocked_only, req.transcription_backend)
+    pipeline.rerun(project_id, req.stages, req.unlocked_only, req.transcription_backend, req.language)
     project = store.get_project(project_id)
     return ProjectCreateResponse(project_id=project_id, status=project["status"])
 

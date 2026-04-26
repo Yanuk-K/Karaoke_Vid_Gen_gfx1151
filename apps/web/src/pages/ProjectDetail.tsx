@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, RefreshCw, Download, Upload, X } from 'lucide-react'
+import { ArrowLeft, Save, RefreshCw, Download, Upload, X, Brain, Mic, Cpu } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import StageProgress from '@/components/StageProgress'
 import TimingTable from '@/components/TimingTable'
@@ -11,7 +11,18 @@ import { refreshLyrics, rerunProject } from '@/lib/api'
 import type { TimingData } from '@/types/api'
 
 type Tab = 'status' | 'timing' | 'preview'
-type TranscriptionBackend = 'openai' | 'whisper_cpp'
+type TranscriptionBackend = 'openai' | 'whisper_cpp' | 'qwen_asr'
+
+type LanguageOption = 'auto' | 'en' | 'ja' | 'ko' | 'zh' | 'yue'
+
+const LANGUAGE_OPTIONS: { value: LanguageOption; label: string }[] = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'zh', label: 'Mandarin' },
+  { value: 'yue', label: 'Cantonese' },
+]
 
 const STAGE_ORDER = [
   'normalize_audio',
@@ -42,6 +53,7 @@ export default function ProjectDetail() {
   const [lyricsText, setLyricsText] = useState('')
   const [rerunFromStage, setRerunFromStage] = useState<(typeof STAGE_ORDER)[number]>('acquire_lyrics')
   const [rerunBackend, setRerunBackend] = useState<TranscriptionBackend>('whisper_cpp')
+  const [rerunLanguage, setRerunLanguage] = useState<LanguageOption>('auto')
   const [rerunning, setRerunning] = useState(false)
   const queryClient = useQueryClient()
 
@@ -60,7 +72,7 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     const backend = project?.transcription_backend
-    if (backend === 'openai' || backend === 'whisper_cpp') {
+    if (backend === 'openai' || backend === 'whisper_cpp' || backend === 'qwen_asr') {
       setRerunBackend(backend)
     }
   }, [project?.transcription_backend])
@@ -114,14 +126,18 @@ export default function ProjectDetail() {
 
   const handleRerun = async (
     stages: string[],
-    backend?: TranscriptionBackend
+    backend?: TranscriptionBackend,
+    lang?: LanguageOption
   ) => {
     setRerunning(true)
     try {
       const backendToUse = needsBackendSelection(stages)
         ? backend || rerunBackend
         : undefined
-      await rerunProject(id!, stages, true, backendToUse)
+      const langToUse = needsBackendSelection(stages)
+        ? lang || (rerunBackend === 'qwen_asr' ? rerunLanguage : undefined)
+        : undefined
+      await rerunProject(id!, stages, true, backendToUse, langToUse)
       await queryClient.invalidateQueries({ queryKey: ['project', id] })
       await queryClient.invalidateQueries({ queryKey: ['timing', id] })
       await queryClient.invalidateQueries({ queryKey: ['lyrics', id] })
@@ -136,7 +152,7 @@ export default function ProjectDetail() {
   const handleRerunFromSelectedStage = async () => {
     const stages = buildStageSuffix(rerunFromStage)
     if (!stages.length) return
-    await handleRerun(stages, rerunBackend)
+    await handleRerun(stages, rerunBackend, rerunLanguage)
   }
 
   const handleSaveLyrics = async () => {
@@ -185,17 +201,17 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() =>
-              handleRerun([
-                'normalize_audio',
-                'separate_stems',
-                'acquire_lyrics',
-                'align_lyrics',
-                'extract_melody',
-                'render_preview',
-              ])
-            }
+<button
+             onClick={() =>
+               handleRerun([
+                 'normalize_audio',
+                 'separate_stems',
+                 'acquire_lyrics',
+                 'align_lyrics',
+                 'extract_melody',
+                 'render_preview',
+               ], rerunBackend, rerunLanguage)
+             }
             disabled={rerunning}
             className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
           >
@@ -253,7 +269,35 @@ export default function ProjectDetail() {
                 <div className="font-bold text-sm">Local Whisper.cpp VAD</div>
                 <div className="text-[10px] mt-1 opacity-70">Privacy focused, uses Silero VAD for timing.</div>
               </button>
+              <button
+                onClick={() => setRerunBackend('qwen_asr')}
+                className={`flex-1 py-3 px-4 rounded-xl border transition-all text-left ${
+                  rerunBackend === 'qwen_asr'
+                    ? 'bg-violet-500/10 border-violet-500 text-violet-400'
+                    : 'bg-gray-950 border-gray-800 text-gray-500 hover:border-gray-700'
+                }`}
+              >
+                <div className="font-bold text-sm">Qwen3-ASR</div>
+                <div className="text-[10px] mt-1 opacity-70">Multi-language, local, GPU recommended.</div>
+              </button>
             </div>
+
+            {rerunBackend === 'qwen_asr' && (
+              <div className="mt-3">
+                <label className="text-[10px] text-gray-400 block mb-1">Language</label>
+                <select
+                  value={rerunLanguage}
+                  onChange={(e) => setRerunLanguage(e.target.value as LanguageOption)}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-2 py-1.5 text-xs focus:border-indigo-500 outline-none"
+                >
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -284,9 +328,9 @@ export default function ProjectDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800/50">
-          <button
-            onClick={() => handleRerun(buildStageSuffix('acquire_lyrics'), rerunBackend)}
-            disabled={rerunning}
+<button
+             onClick={() => handleRerun(buildStageSuffix('acquire_lyrics'), rerunBackend, rerunLanguage)}
+             disabled={rerunning}
             className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-[11px] text-gray-400"
           >
             Rerun Full Lyrics Path

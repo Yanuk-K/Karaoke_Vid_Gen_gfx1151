@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.services.project_store import ProjectStore
 from services.engine.asr.openai_whisper_backend import OpenAIWhisperBackend
+from services.engine.asr.qwen_asr_backend import QwenASRBackend
 from services.engine.asr.whisper_cpp_backend import WhisperCppBackend
 from services.engine.stages.utils import write_json
 
@@ -24,7 +25,7 @@ def run_acquire_lyrics(
 
     # Get transcription backend preference
     transcription_backend = project.get("transcription_backend", "openai")
-    if transcription_backend not in ["openai", "whisper_cpp"]:
+    if transcription_backend not in ["openai", "whisper_cpp", "qwen_asr"]:
         transcription_backend = "openai"
 
     vocals = Path(project["artifacts"].get("vocals", ""))
@@ -82,7 +83,7 @@ def run_acquire_lyrics(
                 payload["official_lyrics_lines"] = official_lyrics_lines
             write_json(out_path, payload)
             raise RuntimeError(f"OpenAI Whisper transcription failed: {e}") from e
-    else:
+    elif transcription_backend == "whisper_cpp":
         # Use whisper.cpp
         try:
             if progress_cb:
@@ -117,6 +118,43 @@ def run_acquire_lyrics(
                 payload["official_lyrics_lines"] = official_lyrics_lines
             write_json(out_path, payload)
             raise RuntimeError(f"whisper.cpp transcription failed: {e}") from e
+    else:
+        # Use Qwen3-ASR
+        try:
+            if progress_cb:
+                progress_cb(project_id, "acquire_lyrics", 20, "Running Qwen3-ASR transcription...")
+
+            from app.core.config import QWEN_ASR_MODEL_PATH
+
+            backend = QwenASRBackend(model_path=QWEN_ASR_MODEL_PATH or None)
+            payload = backend.transcribe(vocals, language=project.get("config", {}).get("language"))
+
+            if official_lyrics_lines:
+                payload["official_lyrics_lines"] = official_lyrics_lines
+
+            if progress_cb:
+                progress_cb(project_id, "acquire_lyrics", 80, "Transcription complete...")
+
+            if not payload.get("segments") and not payload.get("text"):
+                raise RuntimeError(
+                    "Qwen3-ASR returned empty transcription. "
+                    "Check model/configuration or provide lyrics manually."
+                )
+
+            write_json(out_path, payload)
+
+        except Exception as e:
+            logger.error(f"Qwen3-ASR failed: {e}")
+            payload = {
+                "source": "transcription_failed",
+                "backend": "qwen_asr",
+                "error": str(e),
+                "segments": [],
+            }
+            if official_lyrics_lines:
+                payload["official_lyrics_lines"] = official_lyrics_lines
+            write_json(out_path, payload)
+            raise RuntimeError(f"Qwen3-ASR transcription failed: {e}") from e
 
     if progress_cb:
         progress_cb(project_id, "acquire_lyrics", 100, "Lyrics acquired")

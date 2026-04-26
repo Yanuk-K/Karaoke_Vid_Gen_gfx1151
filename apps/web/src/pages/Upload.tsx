@@ -3,19 +3,31 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import UploadZone from '@/components/UploadZone'
 import { createProject } from '@/lib/api'
-import { ArrowLeft, Mic, Cpu } from 'lucide-react'
+import { ArrowLeft, Mic, Cpu, Brain } from 'lucide-react'
 
-type TranscriptionBackend = 'openai' | 'whisper_cpp'
+type TranscriptionBackend = 'openai' | 'whisper_cpp' | 'qwen_asr'
+
+type LanguageOption = 'auto' | 'en' | 'ja' | 'ko' | 'zh' | 'yue'
+
+const LANGUAGE_OPTIONS: { value: LanguageOption; label: string }[] = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'zh', label: 'Mandarin' },
+  { value: 'yue', label: 'Cantonese' },
+]
 
 export default function Upload() {
   const [file, setFile] = useState<File | null>(null)
   const [lyrics, setLyrics] = useState('')
   const [transcriptionBackend, setTranscriptionBackend] = useState<TranscriptionBackend>('openai')
+  const [language, setLanguage] = useState<LanguageOption>('auto')
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const mutation = useMutation({
-    mutationFn: () => createProject(file!, lyrics || undefined, transcriptionBackend),
+    mutationFn: () => createProject(file!, lyrics || undefined, transcriptionBackend, language),
     onSuccess: (data) => {
       navigate(`/project/${data.project_id}`)
     },
@@ -92,7 +104,42 @@ export default function Upload() {
                 <div className="text-xs text-gray-500">Local, no API key needed</div>
               </div>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setTranscriptionBackend('qwen_asr')}
+              className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
+                transcriptionBackend === 'qwen_asr'
+                  ? 'bg-indigo-600/20 border-indigo-500 text-white'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              <Brain size={20} />
+              <div className="text-left">
+                <div className="text-sm font-medium">Qwen3-ASR</div>
+                <div className="text-xs text-gray-500">Local, multi-language, GPU recommended</div>
+              </div>
+            </button>
           </div>
+
+          {transcriptionBackend === 'qwen_asr' && (
+            <div className="mt-4">
+              <label className="text-xs text-gray-400 block mb-2">
+                Language
+              </label>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as LanguageOption)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              >
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div>
@@ -106,7 +153,7 @@ export default function Upload() {
             className="w-full h-48 bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm resize-none focus:border-indigo-500 focus:outline-none transition-colors"
           />
           <p className="text-xs text-gray-600 mt-1">
-            Leave empty to auto-transcribe from audio using {transcriptionBackend === 'openai' ? 'OpenAI Whisper' : 'Whisper.cpp'}
+            Leave empty to auto-transcribe from audio using {transcriptionBackend === 'openai' ? 'OpenAI Whisper' : transcriptionBackend === 'whisper_cpp' ? 'Whisper.cpp' : 'Qwen3-ASR'}
           </p>
         </div>
 

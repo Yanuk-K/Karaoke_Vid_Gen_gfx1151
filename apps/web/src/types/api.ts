@@ -13,7 +13,7 @@ export interface ProjectRead {
   progress: number
   created_at: string
   updated_at: string
-  transcription_backend?: 'openai' | 'whisper_cpp'
+  transcription_backend?: 'openai' | 'whisper_cpp' | 'qwen_asr'
   artifacts: Record<string, string>
   stages: Record<string, StageProgress>
   errors: string[]
@@ -70,7 +70,8 @@ export interface TimingData {
 export interface RerunRequest {
   stages: string[]
   unlocked_only?: boolean
-  transcription_backend?: 'openai' | 'whisper_cpp'
+  transcription_backend?: 'openai' | 'whisper_cpp' | 'qwen_asr'
+  language?: string
 }
 
 export interface LyricsData {

@@ -6,3 +6,4 @@ data/projects/*
 .env
 node_modules
 dist
+models/

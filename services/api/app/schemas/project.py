@@ -28,7 +28,7 @@ class ProjectRead(BaseModel):
     progress: int = Field(ge=0, le=100)
     created_at: datetime
     updated_at: datetime
-    transcription_backend: Literal["openai", "whisper_cpp"] | None = None
+    transcription_backend: Literal["openai", "whisper_cpp", "qwen_asr"] | None = None
     artifacts: dict[str, str]
     stages: dict[str, StageProgress]
     errors: list[str]
@@ -38,7 +38,8 @@ class ProjectRead(BaseModel):
 class RerunRequest(BaseModel):
     stages: list[str]
     unlocked_only: bool = True
-    transcription_backend: Literal["openai", "whisper_cpp"] | None = None
+    transcription_backend: Literal["openai", "whisper_cpp", "qwen_asr"] | None = None
+    language: str | None = None
 
 
 class LyricsPatchRequest(BaseModel):

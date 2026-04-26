@@ -41,9 +41,48 @@ npm run dev
 - **Web App**: `http://localhost:5173` (or as shown in terminal)
 - **Note**: Ensure the Backend is running for the Web UI to function correctly.
 
+## Transcription Backends
+
+The pipeline supports three transcription backends for auto-generating lyrics from audio:
+
+| Backend | Type | Requirements | Best For |
+|---------|------|--------------|----------|
+| **OpenAI Whisper** | Cloud API | `OPENAI_API_KEY` | Best quality, guided by official lyrics |
+| **Whisper.cpp** | Local | `WHISPER_CPP_BIN` + `WHISPER_CPP_MODEL` | Privacy-focused, offline |
+| **Qwen3-ASR** | Local | GPU recommended | Multi-language (EN/JA/KO/ZH/YUE) |
+
+### Qwen3-ASR Setup
+
+Qwen3-ASR is already configured and ready to use. The model is downloaded locally at `models/qwen3-asr-1.7b`.
+
+```bash
+# Install the qwen-asr package (already in requirements.txt)
+pip install qwen-asr
+
+# Model path is set in .env:
+# QWEN_ASR_MODEL_PATH=/home/yeunwookk/proj/Karaoke_Vid_Gen_gfx1151/models/qwen3-asr-1.7b
+```
+
+To use: select "Qwen3-ASR" in the UI and choose a language:
+- **Auto-detect** - Automatic language identification
+- **English** (en)
+- **Japanese** (ja)
+- **Korean** (ko)
+- **Mandarin** (zh)
+- **Cantonese** (yue)
+
+Note: Qwen3-ASR performs best with GPU acceleration. CPU inference is possible but slow.
+
+### Whisper.cpp Setup
+
+```bash
+export WHISPER_CPP_BIN=/path/to/whisper-cli
+export WHISPER_CPP_MODEL=/path/to/ggml-model.bin
+# Optional: export WHISPER_CPP_VAD_MODEL=/path/to/silero-vad.bin
+```
+
 ## Optional integrations
 
-- Set `WHISPER_CPP_BIN` and `WHISPER_CPP_MODEL` to enable local whisper.cpp transcription.
 - `UVR_REPO_PATH` defaults to `/home/yeunwookk/proj/ultimatevocalremovergui_gfx1151`.
 
 Current BS-RoFormer adapter is wired as an integration point and uses passthrough fallback if direct model inference is unavailable.

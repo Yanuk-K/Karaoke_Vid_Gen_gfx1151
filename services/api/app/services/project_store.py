@@ -34,6 +34,7 @@ class ProjectStore:
         audio_file: UploadFile,
         lyrics_text: str | None,
         transcription_backend: str = "openai",
+        language: str | None = None,
     ) -> dict:
         project_id = str(uuid.uuid4())
         project_dir = self.projects_dir / project_id
@@ -54,6 +55,14 @@ class ProjectStore:
 
         stages = {name: {"status": "pending", "message": ""} for name in STAGE_NAMES}
         now = now_iso()
+        config: dict = {
+            "countdown_offset": 2.0,
+            "next_line_lead_time": 0.9,
+            "title": "",
+            "artist": "",
+        }
+        if language:
+            config["language"] = language
         payload = {
             "project_id": project_id,
             "status": "queued",
@@ -69,12 +78,7 @@ class ProjectStore:
             },
             "stages": stages,
             "errors": [],
-            "config": {
-                "countdown_offset": 2.0,
-                "next_line_lead_time": 0.9,
-                "title": "",
-                "artist": "",
-            },
+            "config": config,
         }
         self._write_project(project_id, payload)
         return payload

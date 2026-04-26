@@ -36,6 +36,7 @@ WHISPER_CPP_BIN = os.getenv("WHISPER_CPP_BIN", "")
 WHISPER_CPP_MODEL = os.getenv("WHISPER_CPP_MODEL", "")
 WHISPER_CPP_VAD_MODEL = os.getenv("WHISPER_CPP_VAD_MODEL", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+QWEN_ASR_MODEL_PATH = os.getenv("QWEN_ASR_MODEL_PATH", "")
 
 DEFAULT_NEXT_LINE_LEAD_TIME = 0.9
 DEFAULT_COUNTDOWN_OFFSET = 2.0
@@ -74,4 +75,15 @@ def validate_openai_config() -> list[str]:
     errors: list[str] = []
     if not OPENAI_API_KEY:
         errors.append("OPENAI_API_KEY is not set")
+    return errors
+
+
+def validate_qwen_asr_config() -> list[str]:
+    errors: list[str] = []
+    if QWEN_ASR_MODEL_PATH:
+        model_path = Path(QWEN_ASR_MODEL_PATH)
+        if not model_path.exists():
+            errors.append(
+                f"QWEN_ASR_MODEL_PATH must point to a valid model directory or file, got: {QWEN_ASR_MODEL_PATH}"
+            )
     return errors

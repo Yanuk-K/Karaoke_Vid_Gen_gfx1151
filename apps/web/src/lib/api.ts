@@ -14,7 +14,8 @@ const api = axios.create({
 export async function createProject(
   audioFile: File,
   lyricsText?: string,
-  transcriptionBackend?: 'openai' | 'whisper_cpp'
+  transcriptionBackend?: 'openai' | 'whisper_cpp' | 'qwen_asr',
+  language?: string
 ): Promise<ProjectCreateResponse> {
   const formData = new FormData()
   formData.append('audio_file', audioFile)
@@ -23,6 +24,9 @@ export async function createProject(
   }
   if (transcriptionBackend) {
     formData.append('transcription_backend', transcriptionBackend)
+  }
+  if (language) {
+    formData.append('language', language)
   }
   const res = await api.post<ProjectCreateResponse>('/projects', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -39,11 +43,15 @@ export async function rerunProject(
   id: string,
   stages: string[],
   unlockedOnly = true,
-  transcriptionBackend?: 'openai' | 'whisper_cpp'
+  transcriptionBackend?: 'openai' | 'whisper_cpp' | 'qwen_asr',
+  language?: string
 ): Promise<ProjectCreateResponse> {
   const payload: RerunRequest = { stages, unlocked_only: unlockedOnly }
   if (transcriptionBackend) {
     payload.transcription_backend = transcriptionBackend
+  }
+  if (language) {
+    payload.language = language
   }
 
   const res = await api.post<ProjectCreateResponse>(

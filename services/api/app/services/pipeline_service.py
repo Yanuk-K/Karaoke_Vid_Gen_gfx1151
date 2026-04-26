@@ -23,11 +23,14 @@ class PipelineService:
         stages: list[str],
         unlocked_only: bool = True,
         transcription_backend: str | None = None,
+        language: str | None = None,
     ) -> None:
         payload = self.store.get_project(project_id)
         payload["config"]["unlocked_only"] = unlocked_only
-        if transcription_backend in {"openai", "whisper_cpp"}:
+        if transcription_backend in {"openai", "whisper_cpp", "qwen_asr"}:
             payload["transcription_backend"] = transcription_backend
+        if language:
+            payload["config"]["language"] = language
         self.store.update_project(project_id, payload)
         self._start(project_id, stages)
 
