@@ -87,7 +87,14 @@ class ProjectStore:
         project_path = self.projects_dir / project_id / "project.json"
         if not project_path.exists():
             raise FileNotFoundError(project_id)
-        return json.loads(project_path.read_text(encoding="utf-8"))
+        # Retry logic for race condition where file is being written
+        for _ in range(3):
+            content = project_path.read_text(encoding="utf-8").strip()
+            if content:
+                return json.loads(content)
+            import time
+            time.sleep(0.05)
+        raise FileNotFoundError(project_id)
 
     def update_project(self, project_id: str, payload: dict) -> dict:
         payload["updated_at"] = now_iso()

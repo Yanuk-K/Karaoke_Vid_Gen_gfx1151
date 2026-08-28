@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -250,3 +253,5 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
 
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+    logger.info("ASS subtitle file written: %d lines, word_timing=%s, styles=%d",
+                len(lines), enable_word_timing, len([e for e in events if "Dialogue:" in e]))

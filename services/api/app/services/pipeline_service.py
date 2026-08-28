@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from pathlib import Path
 
 from app.services.project_store import ProjectStore, STAGE_NAMES
 from services.engine.pipeline import PipelineRunner
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineService:
@@ -25,6 +28,7 @@ class PipelineService:
         transcription_backend: str | None = None,
         language: str | None = None,
     ) -> None:
+        logger.info("Pipeline rerun: %s, stages=%s, backend=%s", project_id, stages, transcription_backend)
         payload = self.store.get_project(project_id)
         payload["config"]["unlocked_only"] = unlocked_only
         if transcription_backend in {"openai", "whisper_cpp", "qwen_asr"}:
@@ -35,6 +39,7 @@ class PipelineService:
         self._start(project_id, stages)
 
     def patch_lyrics(self, project_id: str, lyrics_text: str) -> None:
+        logger.info("Lyrics update: %s, length=%d", project_id, len(lyrics_text))
         project = self.store.get_project(project_id)
         project_dir = Path(project["artifacts"]["project_dir"])
         (project_dir / "input" / "lyrics.txt").write_text(lyrics_text, encoding="utf-8")
@@ -44,6 +49,7 @@ class PipelineService:
         self._start(project_id, ["acquire_lyrics", "align_lyrics", "render_preview"])
 
     def refresh_lyrics(self, project_id: str) -> None:
+        logger.info("Lyrics refresh: %s", project_id)
         project = self.store.get_project(project_id)
         project.setdefault("config", {})["force_refresh_edited_lyrics"] = True
         self.store.update_project(project_id, project)
@@ -71,8 +77,10 @@ class PipelineService:
 
     def _start(self, project_id: str, forced_stages: list[str]) -> None:
         if project_id in self._threads and self._threads[project_id].is_alive():
+            logger.warning("Pipeline already running for %s, skipping start", project_id)
             return
 
+        logger.info("Pipeline started: %s, forced_stages=%s", project_id, forced_stages or "full")
         target = lambda: self.runner.run(project_id, forced_stages=forced_stages)
         thread = threading.Thread(target=target, daemon=True)
         thread.start()

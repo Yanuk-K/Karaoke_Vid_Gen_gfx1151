@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, RefreshCw, Download, Upload, X, Brain, Mic, Cpu } from 'lucide-react'
+import { ArrowLeft, Save, RefreshCw, Download, Upload, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import StageProgress from '@/components/StageProgress'
 import TimingTable from '@/components/TimingTable'
@@ -76,6 +76,13 @@ export default function ProjectDetail() {
       setRerunBackend(backend)
     }
   }, [project?.transcription_backend])
+
+  useEffect(() => {
+    if (project && (project.status === 'completed' || project.status === 'failed')) {
+      queryClient.invalidateQueries({ queryKey: ['timing', id!] })
+      queryClient.invalidateQueries({ queryKey: ['lyrics', id!] })
+    }
+  }, [project?.status, id, queryClient])
 
   if (isLoading) {
     return (
@@ -172,6 +179,21 @@ export default function ProjectDetail() {
       await queryClient.invalidateQueries({ queryKey: ['timing', id] })
       await queryClient.invalidateQueries({ queryKey: ['lyrics', id] })
       setTimingData(null) // Clear local state to force reload from fresh server data
+    } finally {
+      setLyricsRefreshing(false)
+    }
+  }
+
+  const handleForceRealign = async () => {
+    setLyricsRefreshing(true)
+    try {
+      await rerunProject(id!, buildStageSuffix('align_lyrics'), true)
+      await queryClient.invalidateQueries({ queryKey: ['project', id] })
+      await queryClient.invalidateQueries({ queryKey: ['timing', id] })
+      await queryClient.invalidateQueries({ queryKey: ['lyrics', id] })
+      setTimingData(null) // Clear local state to force reload from fresh server data
+    } catch (e) {
+      console.error('Force re-align failed', e)
     } finally {
       setLyricsRefreshing(false)
     }
@@ -335,13 +357,20 @@ export default function ProjectDetail() {
           >
             Rerun Full Lyrics Path
           </button>
-          <button
-            onClick={() => handleRerun(buildStageSuffix('align_lyrics'))}
-            disabled={rerunning}
-            className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-[11px] text-gray-400"
-          >
-            Re-align Existing Transcript
-          </button>
+         <button
+              onClick={() => handleRerun(buildStageSuffix('align_lyrics'))}
+              disabled={rerunning}
+              className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-[11px] text-gray-400"
+            >
+              Re-align Existing Transcript
+            </button>
+            <button
+              onClick={handleRefreshMatchedLyrics}
+              disabled={rerunning || lyricsRefreshing}
+              className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-[11px] text-gray-400"
+            >
+              Force Re-align (overwrite edits)
+            </button>
           
           <div className="flex-1" />
           
@@ -503,6 +532,19 @@ export default function ProjectDetail() {
                 className="px-3 py-2 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-xs"
               >
                 {lyricsRefreshing ? 'Refreshing...' : 'Refresh Matched Lyrics'}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-800/50">
+              <div className="text-xs text-gray-500">
+                Re-run alignment from scratch, ignoring any existing edited lyrics.
+              </div>
+              <button
+                onClick={handleForceRealign}
+                disabled={lyricsSaving || lyricsRefreshing}
+                className="px-3 py-2 bg-red-900/30 hover:bg-red-900/50 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-xs text-red-400"
+              >
+                {lyricsRefreshing ? 'Re-aligning...' : 'Force Re-align (overwrite edits)'}
               </button>
             </div>
 

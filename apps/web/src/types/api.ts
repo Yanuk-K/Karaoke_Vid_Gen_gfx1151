@@ -61,6 +61,10 @@ export interface TimingData {
   version: number
   countdown_offset: number
   next_line_lead_time: number
+  title?: string
+  artist?: string
+  enable_word_timing?: boolean
+  enable_melody_visualizer?: boolean
   auto_mute_melody_gaps?: boolean
   melody_gain_db?: number
   lines: LineTiming[]

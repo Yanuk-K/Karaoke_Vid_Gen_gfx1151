@@ -36,7 +36,10 @@ WHISPER_CPP_BIN = os.getenv("WHISPER_CPP_BIN", "")
 WHISPER_CPP_MODEL = os.getenv("WHISPER_CPP_MODEL", "")
 WHISPER_CPP_VAD_MODEL = os.getenv("WHISPER_CPP_VAD_MODEL", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", None)
 QWEN_ASR_MODEL_PATH = os.getenv("QWEN_ASR_MODEL_PATH", "")
+QWEN_ASR_FORCED_ALIGNER_PATH = os.getenv("QWEN_ASR_FORCED_ALIGNER_PATH", "")
 
 DEFAULT_NEXT_LINE_LEAD_TIME = 0.9
 DEFAULT_COUNTDOWN_OFFSET = 2.0
@@ -85,5 +88,11 @@ def validate_qwen_asr_config() -> list[str]:
         if not model_path.exists():
             errors.append(
                 f"QWEN_ASR_MODEL_PATH must point to a valid model directory or file, got: {QWEN_ASR_MODEL_PATH}"
+            )
+    if QWEN_ASR_FORCED_ALIGNER_PATH:
+        aligner_path = Path(QWEN_ASR_FORCED_ALIGNER_PATH)
+        if not aligner_path.exists():
+            errors.append(
+                f"QWEN_ASR_FORCED_ALIGNER_PATH must point to a valid model directory or file, got: {QWEN_ASR_FORCED_ALIGNER_PATH}"
             )
     return errors

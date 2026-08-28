@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import numpy as np
 import soundfile as sf
+
+logger = logging.getLogger(__name__)
 
 
 def energy_based_alignment(
@@ -34,6 +37,7 @@ def energy_based_alignment(
     # Compute short-time energy
     frames = _stft_energy(audio, sr, frame_length, hop_length)
     energy = np.sum(frames ** 2, axis=0)
+    logger.info("Energy alignment: loaded %.1fs audio, %d samples", len(audio) / sr, len(audio))
 
     # Normalize energy
     energy = energy / (np.max(energy) + 1e-10)
@@ -44,9 +48,12 @@ def energy_based_alignment(
 
     # Find boundaries where energy transitions from high to low
     boundaries = _find_transitions(silence_mask, audio.shape[0] // hop_length)
+    logger.info("Energy alignment: %d energy frames, threshold=%.4f, found %d boundaries (need %d)",
+                len(energy), threshold, len(boundaries), len(lines) * 2)
 
     # If we don't have enough boundaries, use equal spacing as fallback
     if len(boundaries) < len(lines) * 2:
+        logger.info("Energy alignment: insufficient boundaries, using fallback alignment")
         return _fallback_alignment(lines, len(audio) / sr)
 
     # Use boundaries to allocate time to each line
@@ -114,6 +121,7 @@ def _allocate_lines(
         line_boundaries.append(boundaries[idx])
 
     # Add end boundary
+    n_frames = len(audio) // hop_length
     line_boundaries.append(len(boundaries) - 1 if boundaries else n_frames)
 
     # Convert frame indices to seconds

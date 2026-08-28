@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import numpy as np
 import soundfile as sf
 import torch
 import torchcrepe
+
+logger = logging.getLogger(__name__)
 
 
 def extract_f0(
@@ -20,6 +23,7 @@ def extract_f0(
     audio, sr = sf.read(audio_path, dtype="float32")
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
+    logger.info("F0 extraction: loaded %.1fs audio, %d samples at %d Hz", len(audio) / sr, len(audio), sr)
 
     # Normalize
     peak = np.max(np.abs(audio))
@@ -65,6 +69,10 @@ def extract_f0(
             "f0_hz": round(f0_val, 2) if voiced else 0.0,
             "voiced": voiced,
         })
+
+    voiced_count = sum(1 for v in values if v["voiced"])
+    voiced_pct = voiced_count / len(values) * 100 if values else 0
+    logger.info("F0 extraction complete: %d frames, %.1f%% voiced", len(values), voiced_pct)
 
     return {
         "sample_rate": 100,
@@ -148,6 +156,12 @@ def f0_to_notes(f0_data: dict, min_note_duration: float = 0.05) -> list[dict]:
             "velocity": velocity,
             "confidence": round(note["confidence_sum"] / note["count"], 3),
         })
+
+    if midi_notes:
+        pitches = [n["pitch"] for n in midi_notes]
+        logger.info("F0 -> MIDI notes: %d notes, pitch range %d-%d (MIDI)", len(midi_notes), min(pitches), max(pitches))
+    else:
+        logger.info("F0 -> MIDI notes: 0 notes (no voiced regions detected)")
 
     return midi_notes
 

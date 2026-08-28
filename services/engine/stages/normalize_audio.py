@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from app.services.project_store import ProjectStore
 from services.engine.stages.utils import run_cmd
+
+logger = logging.getLogger(__name__)
 
 
 def run_normalize_audio(
@@ -19,6 +22,7 @@ def run_normalize_audio(
     if progress_cb:
         progress_cb(project_id, "normalize_audio", 20, "Reading audio file...")
 
+    logger.info("Normalizing audio: %s", src)
     run_cmd(
         [
             "ffmpeg",
@@ -38,6 +42,7 @@ def run_normalize_audio(
     if progress_cb:
         progress_cb(project_id, "normalize_audio", 80, "Normalization complete...")
 
+    logger.info("Normalized audio written: %s", dst)
     project["artifacts"]["normalized_audio"] = str(dst)
     store.update_project(project_id, project)
 

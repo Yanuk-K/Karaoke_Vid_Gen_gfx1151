@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -89,3 +92,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     ass_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+    melody_events = len([e for e in events if "Dialogue:" in e and "MelodyGuide" not in e])
+    logger.info("Melody ASS written: %d F0 points, %d melody events, %d exclusion ranges",
+                len(values), melody_events, len(exclusion_ranges) if exclusion_ranges else 0)

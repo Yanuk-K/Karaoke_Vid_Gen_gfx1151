@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+
+logger = logging.getLogger(__name__)
 
 
 def synthesize_melody_wav(
@@ -59,3 +62,5 @@ def synthesize_melody_wav(
 
     stereo = np.stack([audio, audio], axis=1)
     sf.write(output_path, stereo, sample_rate)
+    logger.info("Melody synth complete: %d F0 points, gain=%.1fdB, output=%s (%d samples)",
+                len(values), gain_db, output_path, n_samples)

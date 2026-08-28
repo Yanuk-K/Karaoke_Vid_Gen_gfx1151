@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _var_len(value: int) -> bytes:
@@ -62,3 +65,4 @@ def write_simple_midi(notes: list[dict], out_path: Path, tempo_bpm: int = 120) -
     chunk.extend(track)
 
     out_path.write_bytes(bytes(header + chunk))
+    logger.info("MIDI written: %d notes to %s (%d bytes)", len(notes), out_path, len(header + chunk))

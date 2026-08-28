@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from app.services.project_store import ProjectStore
+from app.core.config import QWEN_ASR_FORCED_ALIGNER_PATH, QWEN_ASR_MODEL_PATH
 from services.engine.asr.openai_whisper_backend import OpenAIWhisperBackend
 from services.engine.asr.qwen_asr_backend import QwenASRBackend
 from services.engine.asr.whisper_cpp_backend import WhisperCppBackend
@@ -124,10 +125,42 @@ def run_acquire_lyrics(
             if progress_cb:
                 progress_cb(project_id, "acquire_lyrics", 20, "Running Qwen3-ASR transcription...")
 
-            from app.core.config import QWEN_ASR_MODEL_PATH
-
-            backend = QwenASRBackend(model_path=QWEN_ASR_MODEL_PATH or None)
-            payload = backend.transcribe(vocals, language=project.get("config", {}).get("language"))
+            backend = QwenASRBackend(
+                model_path=QWEN_ASR_MODEL_PATH or None,
+                forced_aligner_path=QWEN_ASR_FORCED_ALIGNER_PATH or None,
+            )
+            
+            # 1. First, always transcribe to see what was actually sung
+            asr_payload = backend.transcribe(vocals, language=project.get("config", {}).get("language"))
+            
+            # 2. If official lyrics are provided, use OpenAI to refine the text 
+            # (merging official text with ASR-detected ad-libs/choruses)
+            if official_lyrics_lines:
+                try:
+                    from services.engine.asr.lyric_refiner import LyricRefiner
+                    refiner = LyricRefiner()
+                    official_text = "\n".join(official_lyrics_lines)
+                    asr_text = asr_payload.get("text", "")
+                    
+                    if progress_cb:
+                        progress_cb(project_id, "acquire_lyrics", 85, "Refining lyrics with OpenAI...")
+                    
+                    refined_text = refiner.refine(official_text, asr_text)
+                    
+                    if progress_cb:
+                        progress_cb(project_id, "acquire_lyrics", 90, "Aligning refined lyrics...")
+                        
+                    # 3. Finally, align the refined text for high-precision timestamps
+                    payload = backend.align(
+                        vocals,
+                        text=refined_text,
+                        language=project.get("config", {}).get("language")
+                    )
+                except Exception as e:
+                    logger.warning(f"Lyric refinement failed, falling back to ASR result: {e}")
+                    payload = asr_payload
+            else:
+                payload = asr_payload
 
             if official_lyrics_lines:
                 payload["official_lyrics_lines"] = official_lyrics_lines

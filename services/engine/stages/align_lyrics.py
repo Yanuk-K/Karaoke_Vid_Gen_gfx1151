@@ -286,6 +286,9 @@ def _extract_timed_lines(transcript: dict) -> list[dict]:
                 result.append({"text": chunk, "start": round(cursor, 3), "end": round(chunk_end, 3), "words": []})
                 cursor = chunk_end
 
+    # Fill in timing for segments with None timestamps using interpolation
+    result = _fill_segment_timing(result)
+
     if result:
         return result
 
@@ -293,6 +296,52 @@ def _extract_timed_lines(transcript: dict) -> list[dict]:
     if not text:
         return []
     return [{"text": chunk, "start": None, "end": None, "words": []} for chunk in _split_tokens_for_display(text)]
+
+
+def _fill_segment_timing(segments: list[dict]) -> list[dict]:
+    """Fill in None timestamps by interpolating from neighboring valid segments."""
+    if not segments:
+        return segments
+    
+    n = len(segments)
+    # Find indices of segments with valid timing
+    valid_indices = [i for i, seg in enumerate(segments) 
+                     if seg.get("start") is not None and seg.get("end") is not None]
+    
+    if not valid_indices:
+        return segments
+    
+    for i, seg in enumerate(segments):
+        if seg.get("start") is not None and seg.get("end") is not None:
+            continue
+        
+        # Find previous and next valid segments
+        prev_idx = max([j for j in valid_indices if j < i], default=None)
+        next_idx = min([j for j in valid_indices if j > i], default=None)
+        
+        if prev_idx is not None and next_idx is not None:
+            prev = segments[prev_idx]
+            nxt = segments[next_idx]
+            prev_end = float(prev["end"])
+            next_start = float(nxt["start"])
+            gap = next_start - prev_end
+            if gap > 0:
+                ratio = (i - prev_idx) / max(next_idx - prev_idx, 1)
+                seg["start"] = round(prev_end + gap * ratio, 3)
+                seg["end"] = round(seg["start"] + 0.2, 3)
+            else:
+                seg["start"] = round(prev_end, 3)
+                seg["end"] = round(prev_end + 0.2, 3)
+        elif prev_idx is not None:
+            prev_end = float(segments[prev_idx]["end"])
+            seg["start"] = round(prev_end + 0.2, 3)
+            seg["end"] = round(seg["start"] + 0.2, 3)
+        elif next_idx is not None:
+            next_start = float(segments[next_idx]["start"])
+            seg["end"] = round(max(0.2, next_start - 0.2), 3)
+            seg["start"] = round(max(0.0, seg["end"] - 0.2), 3)
+    
+    return segments
 
 
 def _extract_lines(transcript: dict) -> list[str]:
@@ -467,41 +516,47 @@ def run_align_lyrics(
     if progress_cb:
         progress_cb(project_id, "align_lyrics", 10, "Computing energy alignment...")
 
-    has_segment_timing = all(item.get("start") is not None and item.get("end") is not None for item in timed_lines)
+    # Initialize line_times from timed_lines (which may contain None for timestamps)
+    line_times = [{"text": item["text"], "start": item.get("start"), "end": item.get("end"), "words": item.get("words", [])} for item in timed_lines]
 
-    if has_segment_timing:
-        line_times = [{"text": item["text"], "start": float(item["start"]), "end": float(item["end"])} for item in timed_lines]
+    # Shifting logic: if we have some valid timestamps but they seem offset
+    first_valid_idx = next((i for i, item in enumerate(line_times) if item.get("start") is not None), None)
+    if first_valid_idx is not None:
+        reference_start = float(line_times[first_valid_idx]["start"])
         onset = _estimate_vocal_onset(vocals)
-        first_start = float(line_times[0]["start"])
-        # Only shift if it's a reasonable adjustment (under 5 seconds)
-        # Large shifts usually mean Whisper hallucinated a start time or the energy detector failed.
-        if onset > 0 and 0.5 < abs(onset - first_start) < 5.0:
-            shift = onset - first_start
-            logger.info(f"Applying vocal onset shift: {shift:.3f}s (onset={onset:.3f}s, whisper_start={first_start:.3f}s)")
+        if onset > 0 and abs(onset - reference_start) > 2.0:
+            shift = onset - reference_start
+            logger.info(f"Applying vocal onset shift: {shift:.3f}s (onset={onset:.3f}s, reference={reference_start:.3f}s)")
             for item in line_times:
-                item["start"] = round(min(duration, max(0.0, float(item["start"]) + shift)), 3)
-                item["end"] = round(min(duration, max(item["start"] + 0.05, float(item["end"]) + shift)), 3)
-        else:
-            logger.info(f"Vocal onset shift skipped: offset {abs(onset - first_start):.3f}s outside safety range.")
-    else:
+                if item.get("start") is not None:
+                    item["start"] = round(min(duration - 0.1, max(0.0, float(item["start"]) + shift)), 3)
+                    item["end"] = round(min(duration, max(item["start"] + 0.05, float(item["end"]) + shift)), 3)
+                    # Also shift word-level timestamps if present
+                    for w in item.get("words", []):
+                        w["start"] = round(min(duration - 0.1, max(0.0, float(w.get("start", 0)) + shift)), 3)
+                        w["end"] = round(min(duration, max(w["start"] + 0.05, float(w.get("end", 0)) + shift)), 3)
+
+    # If we have very few valid timestamps, try energy-based alignment as a better fallback than linear
+    valid_count = sum(1 for item in line_times if item.get("start") is not None)
+    if valid_count < len(line_times) * 0.3:
+        logger.info("Too few valid timestamps from model. Attempting energy-based alignment fallback.")
         try:
             energy_result = energy_based_alignment(
                 str(vocals),
                 lines_text,
                 sample_rate=44100,
             )
-        except Exception:
-            energy_result = None
+            if energy_result and len(energy_result) == len(lines_text):
+                # Merge energy results into line_times
+                for i, res in enumerate(energy_result):
+                    if line_times[i].get("start") is None:
+                        line_times[i]["start"] = res["start"]
+                        line_times[i]["end"] = res["end"]
+        except Exception as e:
+            logger.warning(f"Energy-based alignment fallback failed: {e}")
 
-        if energy_result and len(energy_result) == len(lines_text):
-            line_times = energy_result
-        else:
-            span = (duration - countdown) / max(len(lines_text), 1)
-            line_times = []
-            for idx, text in enumerate(lines_text):
-                start = countdown + idx * span
-                end = min(duration, start + span)
-                line_times.append({"text": text, "start": start, "end": end})
+    # Final pass: fill in any remaining None timings with interpolation
+    line_times = _fill_missing_timing(line_times, duration, countdown)
 
     if progress_cb:
         progress_cb(project_id, "align_lyrics", 50, f"Aligning {len(lines_text)} lines...")

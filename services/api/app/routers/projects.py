@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import shutil
 
@@ -19,6 +20,7 @@ from app.services.deps import get_pipeline_service, get_store
 from app.services.pipeline_service import PipelineService
 from app.services.project_store import ProjectStore
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 NO_STORE_HEADERS = {
@@ -113,6 +115,7 @@ async def create_project(
                 },
             )
      
+    logger.info("Project created: backend=%s, has_lyrics=%s", transcription_backend, lyrics_text is not None)
     payload = store.create_project(audio_file, lyrics_text, transcription_backend, language)
     pipeline.start_full_pipeline(payload["project_id"])
     return ProjectCreateResponse(project_id=payload["project_id"], status=payload["status"])
@@ -133,6 +136,7 @@ def rerun_project(
     store: ProjectStore = Depends(get_store),
     pipeline: PipelineService = Depends(get_pipeline_service),
 ) -> ProjectCreateResponse:
+    logger.info("Rerun requested: %s, stages=%s, backend=%s", project_id, req.stages, req.transcription_backend)
     _ = store.get_project(project_id)
     pipeline.rerun(project_id, req.stages, req.unlocked_only, req.transcription_backend, req.language)
     project = store.get_project(project_id)
@@ -146,6 +150,7 @@ def patch_lyrics(
     store: ProjectStore = Depends(get_store),
     pipeline: PipelineService = Depends(get_pipeline_service),
 ) -> ProjectCreateResponse:
+    logger.info("Lyrics patched: %s, length=%d", project_id, len(req.lyrics_text))
     _ = store.get_project(project_id)
     pipeline.patch_lyrics(project_id, req.lyrics_text)
     project = store.get_project(project_id)
@@ -158,6 +163,7 @@ def refresh_lyrics(
     store: ProjectStore = Depends(get_store),
     pipeline: PipelineService = Depends(get_pipeline_service),
 ) -> ProjectCreateResponse:
+    logger.info("Lyrics refresh requested: %s", project_id)
     _ = store.get_project(project_id)
     pipeline.refresh_lyrics(project_id)
     project = store.get_project(project_id)

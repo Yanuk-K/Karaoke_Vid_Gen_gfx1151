@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from app.services.project_store import ProjectStore
 from services.engine.render.ass_builder import write_ass
 from services.engine.render.melody_synth import synthesize_melody_wav
 from services.engine.stages.utils import ffprobe_duration_seconds, read_json, run_cmd
+
+logger = logging.getLogger(__name__)
 
 
 def run_render_preview(
@@ -33,6 +36,7 @@ def run_render_preview(
         raise FileNotFoundError("No audio found - neither instrumental nor normalized audio exists")
 
     duration = max(ffprobe_duration_seconds(audio), 1.0)
+    logger.info("Render input: audio=%s, duration=%.1fs", audio_type, duration)
 
     # Load lyrics/timing
     lyrics_path = project_dir / "transcript" / "edited_lyrics.json"
@@ -82,6 +86,7 @@ def run_render_preview(
         "artist": project["config"].get("artist", ""),
         "enable_word_timing": project["config"].get("enable_word_timing", True),
     }, ass_path)
+    logger.info("ASS subtitle file written: %s", ass_path)
 
     # Optional: Visual melody dots
     enable_visualizer = project["config"].get("enable_melody_visualizer", False)
@@ -107,6 +112,7 @@ def run_render_preview(
         progress_cb(project_id, "render_preview", 30, f"Rendering video ({audio_type})...")
 
     preview = project_dir / "render" / "preview.mp4"
+    logger.info("Starting video render: %s (audio=%s)", preview.name, audio_type)
     final = project_dir / "render" / "final.mp4"
 
     bg_str = project["artifacts"].get("background", "")

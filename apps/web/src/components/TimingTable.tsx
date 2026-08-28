@@ -506,7 +506,7 @@ export default function TimingTable({ data, onChange, audioUrl }: TimingTablePro
 
   const playAt = (time: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, time - 0.5) // Slight pre-roll
+      audioRef.current.currentTime = Math.max(0, time) // Start exactly at time
       audioRef.current.play()
     }
   }

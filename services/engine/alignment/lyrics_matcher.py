@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from difflib import SequenceMatcher
 
 from app.core import config
+
+logger = logging.getLogger(__name__)
 
 
 _NORM_RE = re.compile(r"[^\w\uac00-\ud7af\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]+")
@@ -125,14 +128,14 @@ def _fallback_match(official_lines: list[str], timed_lines: list[dict]) -> list[
     n = len(timed_lines)
     mapping: list[int | None] = [None] * m
     
+    logger.info("Fallback lyric alignment: %d official lines, %d ASR segments", m, n)
+    
     # Simple greedy search for each official line
     last_timed_idx = 0
     for j, official in enumerate(official_lines):
         best_idx = None
         best_score = -1.0
         
-        # Search window to maintain order but allow some flexibility
-        # (Lyrics usually follow ASR order)
         search_start = max(0, last_timed_idx - 2)
         search_end = min(n, last_timed_idx + 10)
         
@@ -140,7 +143,6 @@ def _fallback_match(official_lines: list[str], timed_lines: list[dict]) -> list[
             asr = str(timed_lines[i].get("text", "")).strip()
             sim = _similarity(official, asr)
             
-            # Distance penalty to keep things in order
             dist_penalty = abs(i - last_timed_idx) * 0.05
             score = sim - dist_penalty
             
@@ -151,6 +153,13 @@ def _fallback_match(official_lines: list[str], timed_lines: list[dict]) -> list[
         if best_idx is not None and best_score > 0.3:
             mapping[j] = best_idx
             last_timed_idx = best_idx
+            if (j + 1) % 10 == 0:
+                logger.info("Fallback alignment: matched %d/%d official lines", j + 1, m)
+        else:
+            logger.debug("Fallback alignment: no match for line %d '%s' (best_score=%.3f)", j, official[:30], best_score)
+            
+    matched_count = sum(1 for x in mapping if x is not None)
+    logger.info("Fallback alignment complete: %d/%d lines matched", matched_count, m)
             
     return _apply_mapping(official_lines, timed_lines, mapping)
 
@@ -160,11 +169,16 @@ def _openai_match(official_lines: list[str], timed_lines: list[dict]) -> list[di
     if not api_key or not official_lines or not timed_lines:
         return None
 
+    model_name = config.OPENAI_MODEL or "gpt-4o-mini"
+    base_url = config.OPENAI_BASE_URL
+
     try:
         import openai
-        client = openai.OpenAI(api_key=api_key)
-        
-        # Prepare a more concise payload to avoid token limits
+        client_kwargs: dict = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = openai.OpenAI(**client_kwargs)
+
         payload = {
             "official": official_lines,
             "asr": [
@@ -172,7 +186,7 @@ def _openai_match(official_lines: list[str], timed_lines: list[dict]) -> list[di
                 for i, t in enumerate(timed_lines)
             ],
         }
-        
+
         prompt = (
             "You are a professional karaoke lyric aligner.\n"
             "TASK: Map each 'official' lyric line to the most likely index in 'asr' (automated transcript) lines.\n"
@@ -186,9 +200,12 @@ def _openai_match(official_lines: list[str], timed_lines: list[dict]) -> list[di
             "Return a JSON object with key 'mapping': an array of objects, one for each official line in order.\n"
             "Format: [{\"asr_index\": int or null}, ...]"
         )
-        
+
+        logger.info("Calling OpenAI (%s) for lyric alignment: %d official lines, %d ASR segments", model_name, len(official_lines), len(timed_lines))
+
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name,
+            timeout=30,
             temperature=0,
             messages=[
                 {"role": "system", "content": "You are a lyric alignment assistant. Return valid JSON mapping."},
@@ -196,11 +213,14 @@ def _openai_match(official_lines: list[str], timed_lines: list[dict]) -> list[di
             ],
             response_format={"type": "json_object"},
         )
-        
+
+        logger.info("OpenAI lyric alignment call succeeded")
+
         obj = json.loads(resp.choices[0].message.content or "{}")
         mapping_data = obj.get("mapping", [])
-        
+
         if not isinstance(mapping_data, list) or len(mapping_data) != len(official_lines):
+            logger.warning("OpenAI returned invalid mapping format: expected %d entries, got %d", len(official_lines), len(mapping_data))
             return None
 
         mapped_idx: list[int | None] = []
@@ -213,17 +233,35 @@ def _openai_match(official_lines: list[str], timed_lines: list[dict]) -> list[di
                 mapped_idx.append(None)
 
         return _apply_mapping(official_lines, timed_lines, mapped_idx)
-    except Exception:
+    except openai.Timeout as e:
+        logger.warning("OpenAI lyric alignment timed out after 30s: %s", e)
+        return None
+    except openai.APIConnectionError as e:
+        logger.warning("OpenAI lyric alignment connection failed: %s", e)
+        return None
+    except openai.AuthenticationError as e:
+        logger.warning("OpenAI lyric alignment auth failed: %s", e)
+        return None
+    except openai.APIStatusError as e:
+        logger.warning("OpenAI lyric alignment API error (status %d): %s", e.status_code, e)
+        return None
+    except Exception as e:
+        logger.warning("OpenAI lyric alignment unexpected error: %s", e)
         return None
 
 
 def match_official_lyrics(official_lines: list[str], timed_lines: list[dict]) -> list[dict]:
     """Align official lyrics to timed ASR lines, ensuring all official lines are kept."""
+    logger.info("Matching official lyrics: %d official lines, %d timed ASR lines", len(official_lines), len(timed_lines))
     if not official_lines:
+        logger.info("No official lyrics, returning ASR lines as-is")
         return timed_lines
         
     openai_result = _openai_match(official_lines, timed_lines)
     if openai_result:
+        logger.info("Matched using OpenAI-style matching: %d lines", len(openai_result))
         return openai_result
         
-    return _fallback_match(official_lines, timed_lines)
+    fallback_result = _fallback_match(official_lines, timed_lines)
+    logger.info("Matched using fallback matching: %d lines", len(fallback_result))
+    return fallback_result

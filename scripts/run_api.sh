@@ -3,4 +3,5 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PYTHONPATH="$ROOT_DIR/services/api:$ROOT_DIR"
+export TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
